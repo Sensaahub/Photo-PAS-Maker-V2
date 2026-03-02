@@ -46,6 +46,17 @@
             <input type="file" id="input-foto" accept=".jpg,.jpeg,.png" hidden>
         </div>
 
+        <button type="button" class="btn-kamera" onclick="bukaKamera()">From Camera</button>
+
+        <div id="kamera-wrapper" style="display: none;">
+            <video id="kamera-preview" autoplay playsinline></video>
+            <div class="kamera-controls">
+                <button type="button" class="btn-ambil-foto" onclick="ambilFoto()">Ambil Foto</button>
+                <button type="button" class="btn-tutup-kamera" onclick="tutupKamera()">Batal</button>
+            </div>
+            <canvas id="kamera-canvas" style="display: none;"></canvas>
+        </div>
+
         <div class="preview-before" id="preview-before" style="display:none">
             <p class="preview-label">Foto Asli</p>
             <img id="img-before" src="" alt="Foto asli">

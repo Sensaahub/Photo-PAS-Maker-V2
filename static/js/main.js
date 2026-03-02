@@ -6,6 +6,7 @@ let currentWarna = 'merah';
 let editorMode = 'single';
 let currentBatchItem = null;
 let rgbaImageObj = new Image();
+let streamCamera = null;
 
 function switchTab(tab, btn) {
     currentTab = tab;
@@ -317,4 +318,55 @@ function reset() {
     } else {
         document.getElementById('tab-batch').style.display = 'block';
     }
+}
+
+function bukaKamera() {
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false })
+        .then(stream => {
+            streamKamera = stream;
+            const video = document.getElementById('kamera-preview');
+            video.srcObject = stream;
+            document.getElementById('kamera-wrapper').style.display = 'block';
+            document.getElementById('upload-area-single').style.display = 'none';
+            document.getElementById('btn-proses').style.display = 'none';
+            document.getElementById('preview-before').style.display = 'none';
+        })
+        .catch(err => {
+            alert('Tidak bisa mengakses kamera: ' + err.message);
+        });
+}
+
+function ambilFoto() {
+    const video = document.getElementById('kamera-preview');
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+
+    canvas.toBlob(blob => {
+        const file = new File([blob], 'foto_kamera.jpg', { type: 'image/jpeg' });
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        document.getElementById('input-foto').files = dt.files;
+
+        const reader = new FileReader();
+        reader.onload = e => {
+            document.getElementById('img-before').src = e.target.result;
+            document.getElementById('preview-before').style.display = 'block';
+            document.getElementById('btn-proses').style.display = 'block';
+        };
+        reader.readAsDataURL(file);
+
+        tutupKamera();
+        document.getElementById('upload-area-single').style.display = 'block';
+    }, 'image/jpeg', 0.95);
+}
+
+function tutupKamera() {
+    if (streamKamera) {
+        streamKamera.getTracks().forEach(track => track.stop());
+        streamKamera = null;
+    }
+    document.getElementById('kamera-wrapper').style.display = 'none';
+    document.getElementById('upload-area-single').style.display = 'block';
 }
