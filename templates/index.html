@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Foto Pas Photo Otomatis</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+<div class="container">
+    <div class="header">
+        <h1>Foto Pas Photo</h1>
+        <p>Upload foto kamu, kami proses otomatis dalam hitungan detik</p>
+    </div>
+
+    <div class="tab-wrapper">
+        <button class="tab-btn active" onclick="switchTab('single', this)">Upload Satu Foto</button>
+        <button class="tab-btn" onclick="switchTab('batch', this)">Upload ZIP (Batch)</button>
+    </div>
+
+    <div class="card" id="tab-single">
+        <div class="options-row">
+            <div class="option-group">
+                <label>Ukuran Foto</label>
+                <select id="ukuran-single">
+                    <option value="2x3">2x3</option>
+                    <option value="3x4" selected>3x4</option>
+                    <option value="4x6">4x6</option>
+                </select>
+            </div>
+            <div class="option-group">
+                <label>Warna Background</label>
+                <select id="warna-single">
+                    <option value="merah">Merah</option>
+                    <option value="biru">Biru</option>
+                    <option value="putih">Putih</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="upload-area" id="upload-area-single" onclick="document.getElementById('input-foto').click()">
+            <div class="upload-icon">📷</div>
+            <p>Klik untuk upload foto</p>
+            <span>JPG, JPEG, PNG</span>
+            <input type="file" id="input-foto" accept=".jpg,.jpeg,.png" hidden>
+        </div>
+
+        <div class="preview-before" id="preview-before" style="display:none">
+            <p class="preview-label">Foto Asli</p>
+            <img id="img-before" src="" alt="Foto asli">
+        </div>
+
+        <button class="btn-proses" id="btn-proses" style="display:none" onclick="prosesFoto()">
+            Proses Foto
+        </button>
+    </div>
+
+    <div class="card" id="tab-batch" style="display:none">
+        <div class="options-row">
+            <div class="option-group">
+                <label>Ukuran Foto</label>
+                <select id="ukuran-batch">
+                    <option value="2x3">2x3</option>
+                    <option value="3x4" selected>3x4</option>
+                    <option value="4x6">4x6</option>
+                </select>
+            </div>
+            <div class="option-group">
+                <label>Warna Background</label>
+                <select id="warna-batch">
+                    <option value="merah">Merah</option>
+                    <option value="biru">Biru</option>
+                    <option value="putih">Putih</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="upload-area" id="upload-area-batch" onclick="document.getElementById('input-zip').click()">
+            <div class="upload-icon">🗂️</div>
+            <p>Klik untuk upload file ZIP</p>
+            <span>ZIP berisi foto JPG/PNG</span>
+            <input type="file" id="input-zip" accept=".zip" hidden>
+        </div>
+
+        <div id="zip-nama" class="zip-nama" style="display:none"></div>
+
+        <button class="btn-proses" id="btn-proses-batch" style="display:none" onclick="prosesBatch()">
+            Proses Semua Foto
+        </button>
+    </div>
+
+    <div class="loading" id="loading" style="display:none">
+        <div class="spinner"></div>
+        <p id="loading-text">Sedang memproses foto...</p>
+        <div class="loading-bar-wrapper">
+            <div class="loading-bar" id="loading-bar"></div>
+        </div>
+        <p id="loading-persen">0%</p>
+    </div>
+
+    <div class="hasil-single" id="hasil-single" style="display:none">
+        <h2>Hasil</h2>
+        <div class="hasil-grid">
+            <div class="hasil-item">
+                <p class="preview-label">Foto Pas Photo</p>
+                <img id="img-hasil" src="" alt="Hasil">
+                <a class="btn-download" id="btn-download-single" href="#" download>Download Foto</a>
+            </div>
+            <div class="hasil-item">
+                <p class="preview-label">Layout Siap Cetak</p>
+                <img id="img-layout" src="" alt="Layout">
+                <a class="btn-download" id="btn-download-layout" href="#" download>Download Layout</a>
+            </div>
+        </div>
+        <button class="btn-adjust" onclick="bukaEditor('single')">Sesuaikan Posisi</button>
+        <button class="btn-reset" onclick="reset()">Upload Foto Baru</button>
+    </div>
+
+    <div class="hasil-batch" id="hasil-batch" style="display:none">
+        <div class="hasil-batch-header">
+            <h2>Hasil Batch</h2>
+            <button class="btn-download-zip" onclick="downloadZip()">Download Semua (ZIP)</button>
+        </div>
+        <div id="gagal-info" class="gagal-info" style="display:none"></div>
+        <div class="batch-grid" id="batch-grid"></div>
+        <button class="btn-reset" onclick="reset()">Upload Baru</button>
+    </div>
+</div>
+
+<div class="modal-overlay" id="modal-editor" style="display:none">
+    <div class="modal-editor">
+        <div class="modal-header">
+            <h3>Sesuaikan Posisi</h3>
+            <button class="modal-close" onclick="tutupEditor()">✕</button>
+        </div>
+        <div class="editor-body">
+            <div class="canvas-wrapper">
+                <canvas id="editor-canvas"></canvas>
+            </div>
+            <div class="editor-controls">
+                <div class="control-group">
+                    <label>Zoom</label>
+                    <input type="range" id="slider-zoom" min="50" max="200" value="100" oninput="updateCanvas()">
+                    <span id="zoom-value">100%</span>
+                </div>
+                <div class="control-group">
+                    <label>Geser Horizontal</label>
+                    <input type="range" id="slider-x" min="-1000" max="1000" value="0" oninput="updateCanvas()">
+                </div>
+                <div class="control-group">
+                    <label>Geser Vertikal</label>
+                    <input type="range" id="slider-y" min="-1000" max="1000" value="0" oninput="updateCanvas()">
+                </div>
+                <button class="btn-reset-adjust" onclick="resetAdjust()">Reset</button>
+                <button class="btn-simpan" onclick="simpanAdjust()">Simpan</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="/static/js/main.js"></script>
+</body>
+</html>
