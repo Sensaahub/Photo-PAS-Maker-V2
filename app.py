@@ -22,6 +22,7 @@ UKURAN_FOTO = {
     "2x3": (472, 708),
     "3x4": (708, 944),
     "4x6": (944, 1418),
+    "9x16": (1200, 1800)
 }
 
 WARNA_BACKGROUND = {
@@ -141,6 +142,25 @@ def crop_dengan_params(image_rgba, ukuran, offset_x, offset_y, scale):
     canvas.paste(image_scaled, (paste_x, paste_y), image_scaled)
     return canvas
 
+def crop_photobooth(image_rgba, ukuran):
+    lebar_target, tinggi_target = ukuran
+    lebar_asli, tinggi_asli = image_rgba.size
+
+    rasio_target = lebar_target / tinggi_target
+    rasio_asli = lebar_asli / tinggi_asli
+
+    if rasio_asli > rasio_target:
+        tinggi_crop = tinggi_asli
+        lebar_crop = int(tinggi_asli * rasio_target)
+    else:
+        lebar_crop = lebar_asli
+        tinggi_crop = int(lebar_asli / rasio_target)
+
+    left = (lebar_asli - lebar_crop) // 2
+    top = max(0, (tinggi_asli - tinggi_crop) // 4)
+
+    cropped = image_rgba.crop((left, top, left + lebar_crop, top + tinggi_crop))
+    return cropped.resize((lebar_target, tinggi_target), Image.LANCZOS)
 
 def buat_layout_cetak(image, ukuran_key):
     a4_lebar, a4_tinggi = 2480, 3508
@@ -358,6 +378,121 @@ def download_zip(session_id):
     zip_buffer.seek(0)
     return send_file(zip_buffer, mimetype="application/zip", as_attachment=True, download_name="hasil_foto.zip")
 
+@app.route("/get-assets")
+def get_assets():
+    backgrounds = []
+    frames = []
+
+    bg_folder = "static/backgrounds"
+    for f in sorted(os.listdir(bg_folder)):
+        if f.lower().endswith((".jpg", ".jpeg", ".png")):
+            nama = os.path.splitext(f)[0].replace("_", " ").title()
+            backgrounds.append({"nama": nama, "file": f, "url": f"/static/backgrounds/{f}"})
+
+    frame_folder = "static/frames"
+    for f in sorted(os.listdir(frame_folder)):
+        if f.lower().endswith(".png"):
+            nama = os.path.splitext(f)[0].replace("_", " ").title()
+            frames.append({"nama": nama, "file": f, "url": f"/static/frames/{f}"})
+
+    return jsonify({"backgrounds": backgrounds, "frames": frames})
+
+
+@app.route("/proses-photobooth", methods=["POST"])
+def proses_photobooth():
+    ukuran_key = "9x16"
+    file = request.files.get("foto")
+    bg_file = request.form.get("background")
+    frame_file = request.form.get("frame")
+
+    if not file:
+        return jsonify({"error": "Tidak ada foto yang diupload"}), 400
+
+    nama_asli = os.path.splitext(file.filename)[0]
+    session_id = str(uuid.uuid4())
+    session_folder = os.path.join(RESULT_FOLDER, session_id)
+    os.makedirs(session_folder, exist_ok=True)
+
+    try:
+        image = Image.open(file.stream).convert("RGB")
+        image = ImageOps.exif_transpose(image)
+        image = color_adjustment(image)
+
+        path_rgba_cache = os.path.join(session_folder, f"{nama_asli}_rgba.png")
+        image_rgba = hapus_background(image, path_rgba_cache)
+        image_rgba.save(path_rgba_cache, "PNG")
+
+        wajah = deteksi_wajah_mp(image_rgba)
+        if wajah is None:
+            for angle in [90, 270, 180]:
+                rotated = image.rotate(angle, expand=True)
+                rotated_rgba = hapus_background(rotated)
+                wajah = deteksi_wajah_mp(rotated_rgba)
+                if wajah is not None:
+                    image_rgba = rotated_rgba
+                    break
+
+        if wajah is None:
+            return jsonify({"error": "Wajah tidak terdeteksi"}), 400
+
+        image_crop = crop_photobooth(image_rgba, UKURAN_FOTO[ukuran_key])
+
+        if bg_file:
+            bg_path = os.path.join("static/backgrounds", bg_file)
+            if os.path.exists(bg_path):
+                background = Image.open(bg_path).convert("RGB")
+                background = background.resize(UKURAN_FOTO[ukuran_key], Image.LANCZOS)
+            else:
+                background = Image.new("RGB", UKURAN_FOTO[ukuran_key], (255, 255, 255))
+        else:
+            background = Image.new("RGB", UKURAN_FOTO[ukuran_key], (255, 255, 255))
+
+        background = background.convert("RGBA")
+        background.paste(image_crop, mask=image_crop.split()[3])
+        hasil = background.convert("RGB")
+
+        if frame_file:
+            frame_path = os.path.join("static/frames", frame_file)
+            if os.path.exists(frame_path):
+                frame = Image.open(frame_path).convert("RGBA")
+                frame = frame.resize(UKURAN_FOTO[ukuran_key], Image.LANCZOS)
+                hasil_rgba = hasil.convert("RGBA")
+                hasil_rgba.paste(frame, mask=frame.split()[3])
+                hasil = hasil_rgba.convert("RGB")
+
+        path_hasil = os.path.join(session_folder, f"{nama_asli}_photobooth.jpg")
+        hasil.save(path_hasil, "JPEG", quality=100)
+
+        return jsonify({
+            "session_id": session_id,
+            "nama_asli": nama_asli,
+            "foto_hasil": f"/static/results/{session_id}/{nama_asli}_photobooth.jpg",
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/upload-frame", methods=["POST"])
+def upload_frame():
+    file = request.files.get("frame")
+    if not file:
+        return jsonify({"error": "Tidak ada file"}), 400
+    if not file.filename.lower().endswith(".png"):
+        return jsonify({"error": "Harus file PNG"}), 400
+
+    nama_bersih = str(uuid.uuid4())[:8] + "_" + file.filename.replace(" ", "_")
+    path = os.path.join("static/frames", nama_bersih)
+    img = Image.open(file.stream).convert("RGBA")
+    img = img.resize(UKURAN_FOTO["3x4"], Image.LANCZOS)
+    img.save(path, "PNG")
+
+    nama_tampil = os.path.splitext(file.filename)[0].replace("_", " ").title()
+    return jsonify({
+        "nama": nama_tampil,
+        "file": nama_bersih,
+        "url": f"/static/frames/{nama_bersih}"
+    })
 
 if __name__ == "__main__":
     os.makedirs(UPLOAD_FOLDER, exist_ok=True)

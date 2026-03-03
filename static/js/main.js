@@ -6,7 +6,10 @@ let currentWarna = 'merah';
 let editorMode = 'single';
 let currentBatchItem = null;
 let rgbaImageObj = new Image();
-let streamCamera = null;
+let selectedBg = null;
+let selectedFrame = null;
+let streamKamera = null;
+let streamKameraPb = null;
 
 function switchTab(tab, btn) {
     currentTab = tab;
@@ -14,6 +17,7 @@ function switchTab(tab, btn) {
     btn.classList.add('active');
     document.getElementById('tab-single').style.display = tab === 'single' ? 'block' : 'none';
     document.getElementById('tab-batch').style.display = tab === 'batch' ? 'block' : 'none';
+    document.getElementById('tab-photobooth').style.display = tab === 'photobooth' ? 'block' : 'none';
     reset();
 }
 
@@ -35,6 +39,18 @@ document.getElementById('input-zip').addEventListener('change', function () {
     document.getElementById('zip-nama').style.display = 'block';
     document.getElementById('zip-nama').textContent = 'File dipilih: ' + file.name;
     document.getElementById('btn-proses-batch').style.display = 'block';
+});
+
+document.getElementById('input-foto-pb').addEventListener('change', function () {
+    const file = this.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+        document.getElementById('img-before-pb').src = e.target.result;
+        document.getElementById('preview-before-pb').style.display = 'block';
+    };
+    reader.readAsDataURL(file);
+    muatAssets();
 });
 
 function prosesFoto() {
@@ -95,7 +111,6 @@ function prosesBatch() {
                     lines.forEach(line => {
                         if (line.startsWith('data: ')) {
                             const data = JSON.parse(line.replace('data: ', ''));
-
                             if (data.type === 'progress') {
                                 tampilkanLoading(
                                     `Memproses ${data.nama} (${data.current}/${data.total})`,
@@ -296,52 +311,31 @@ function downloadZip() {
     window.location.href = '/download-zip/' + currentSessionId;
 }
 
-function reset() {
-    currentSessionId = null;
-    currentNamaAsli = null;
-
-    document.getElementById('input-foto').value = '';
-    document.getElementById('input-zip').value = '';
-    document.getElementById('img-before').src = '';
-    document.getElementById('preview-before').style.display = 'none';
-    document.getElementById('btn-proses').style.display = 'none';
-    document.getElementById('btn-proses-batch').style.display = 'none';
-    document.getElementById('zip-nama').style.display = 'none';
-    document.getElementById('hasil-single').style.display = 'none';
-    document.getElementById('hasil-batch').style.display = 'none';
-    document.getElementById('loading').style.display = 'none';
-    document.getElementById('gagal-info').style.display = 'none';
-    document.getElementById('batch-grid').innerHTML = '';
-
-    if (currentTab === 'single') {
-        document.getElementById('tab-single').style.display = 'block';
-    } else {
-        document.getElementById('tab-batch').style.display = 'block';
-    }
-}
-
 function bukaKamera() {
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false })
-        .then(stream => {
-            streamKamera = stream;
-            const video = document.getElementById('kamera-preview');
-            video.srcObject = stream;
-            document.getElementById('kamera-wrapper').style.display = 'block';
-            document.getElementById('upload-area-single').style.display = 'none';
-            document.getElementById('btn-proses').style.display = 'none';
-            document.getElementById('preview-before').style.display = 'none';
-        })
-        .catch(err => {
-            alert('Tidak bisa mengakses kamera: ' + err.message);
-        });
+    navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', aspectRatio: 2/3 },
+        audio: false
+    })
+    .then(stream => {
+        streamKamera = stream;
+        const video = document.getElementById('kamera-preview');
+        video.srcObject = stream;
+        document.getElementById('kamera-wrapper').style.display = 'block';
+        document.getElementById('upload-area-single').style.display = 'none';
+        document.getElementById('btn-proses').style.display = 'none';
+        document.getElementById('preview-before').style.display = 'none';
+    })
+    .catch(err => { alert('Tidak bisa mengakses kamera: ' + err.message); });
 }
 
 function ambilFoto() {
     const video = document.getElementById('kamera-preview');
     const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth;
+    const targetW = video.videoHeight * 9 / 16;
+    const offsetX = (video.videoWidth - targetW) / 2;
+    canvas.width = targetW;
     canvas.height = video.videoHeight;
-    canvas.getContext('2d').drawImage(video, 0, 0);
+    canvas.getContext('2d').drawImage(video, offsetX, 0, targetW, video.videoHeight, 0, 0, targetW, video.videoHeight);
 
     canvas.toBlob(blob => {
         const file = new File([blob], 'foto_kamera.jpg', { type: 'image/jpeg' });
@@ -369,4 +363,195 @@ function tutupKamera() {
     }
     document.getElementById('kamera-wrapper').style.display = 'none';
     document.getElementById('upload-area-single').style.display = 'block';
+}
+
+function bukaKameraPb() {
+    navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', aspectRatio: 2/3 },
+        audio: false
+    })
+    .then(stream => {
+        streamKameraPb = stream;
+        const video = document.getElementById('kamera-preview-pb');
+        video.srcObject = stream;
+        document.getElementById('kamera-wrapper-pb').style.display = 'block';
+        document.getElementById('upload-area-photobooth').style.display = 'none';
+    })
+    .catch(err => { alert('Tidak bisa mengakses kamera: ' + err.message); });
+}
+
+function ambilFotoPb() {
+    const video = document.getElementById('kamera-preview-pb');
+    const canvas = document.createElement('canvas');
+    const targetW = video.videoHeight * 9 / 16;
+    const offsetX = (video.videoWidth - targetW) / 2;
+    canvas.width = targetW;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d').drawImage(video, offsetX, 0, targetW, video.videoHeight, 0, 0, targetW, video.videoHeight);
+
+    canvas.toBlob(blob => {
+        const file = new File([blob], 'foto_pb.jpg', { type: 'image/jpeg' });
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        document.getElementById('input-foto-pb').files = dt.files;
+
+        const reader = new FileReader();
+        reader.onload = e => {
+            document.getElementById('img-before-pb').src = e.target.result;
+            document.getElementById('preview-before-pb').style.display = 'block';
+        };
+        reader.readAsDataURL(file);
+
+        tutupKameraPb();
+        document.getElementById('upload-area-photobooth').style.display = 'block';
+        muatAssets();
+    }, 'image/jpeg', 0.95);
+}
+
+function tutupKameraPb() {
+    if (streamKameraPb) {
+        streamKameraPb.getTracks().forEach(track => track.stop());
+        streamKameraPb = null;
+    }
+    document.getElementById('kamera-wrapper-pb').style.display = 'none';
+    document.getElementById('upload-area-photobooth').style.display = 'block';
+}
+
+function muatAssets() {
+    fetch('/get-assets')
+        .then(res => res.json())
+        .then(data => {
+            const bgGrid = document.getElementById('bg-grid');
+            bgGrid.innerHTML = '';
+            data.backgrounds.forEach((bg, i) => {
+                const div = document.createElement('div');
+                div.className = 'asset-item' + (i === 0 ? ' active' : '');
+                div.innerHTML = `<img src="${bg.url}" alt="${bg.nama}"><p>${bg.nama}</p>`;
+                div.onclick = () => pilihBg(bg.file, div);
+                bgGrid.appendChild(div);
+                if (i === 0) selectedBg = bg.file;
+            });
+
+            const frameGrid = document.getElementById('frame-grid');
+            frameGrid.innerHTML = `
+                <div class="asset-item" id="frame-none" onclick="pilihFrame(null, this)">
+                    <div class="asset-none">Tanpa Frame</div>
+                </div>
+            `;
+            data.frames.forEach(frame => {
+                const div = document.createElement('div');
+                div.className = 'asset-item';
+                div.innerHTML = `<img src="${frame.url}" alt="${frame.nama}"><p>${frame.nama}</p>`;
+                div.onclick = () => pilihFrame(frame.file, div);
+                frameGrid.appendChild(div);
+            });
+
+            document.getElementById('pb-assets').style.display = 'block';
+            document.getElementById('btn-proses-pb').style.display = 'block';
+        });
+}
+
+function pilihBg(file, el) {
+    selectedBg = file;
+    document.querySelectorAll('#bg-grid .asset-item').forEach(i => i.classList.remove('active'));
+    el.classList.add('active');
+}
+
+function pilihFrame(file, el) {
+    selectedFrame = file;
+    document.querySelectorAll('#frame-grid .asset-item').forEach(i => i.classList.remove('active'));
+    el.classList.add('active');
+}
+
+function uploadFrame(input) {
+    const file = input.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('frame', file);
+
+    fetch('/upload-frame', { method: 'POST', body: formData })
+        .then(res => res.json())
+        .then(data => {
+            if (data.error) { alert('Gagal: ' + data.error); return; }
+            const frameGrid = document.getElementById('frame-grid');
+            const div = document.createElement('div');
+            div.className = 'asset-item active';
+            div.innerHTML = `<img src="${data.url}?t=${Date.now()}" alt="${data.nama}"><p>${data.nama}</p>`;
+            div.onclick = () => pilihFrame(data.file, div);
+            frameGrid.appendChild(div);
+            pilihFrame(data.file, div);
+        })
+        .catch(() => alert('Terjadi kesalahan upload frame.'));
+}
+
+function prosesPhotobooth() {
+    const file = document.getElementById('input-foto-pb').files[0];
+    if (!file) { alert('Upload foto dulu!'); return; }
+    if (!selectedBg) { alert('Pilih background dulu!'); return; }
+
+    const formData = new FormData();
+    formData.append('foto', file);
+    formData.append('background', selectedBg);
+    if (selectedFrame) formData.append('frame', selectedFrame);
+
+    tampilkanLoading('Memproses foto photobooth...', 0);
+    document.getElementById('tab-photobooth').style.display = 'none';
+
+    fetch('/proses-photobooth', { method: 'POST', body: formData })
+        .then(res => res.json())
+        .then(data => {
+            sembunyikanLoading();
+            if (data.error) {
+                alert('Gagal: ' + data.error);
+                document.getElementById('tab-photobooth').style.display = 'block';
+                return;
+            }
+            const ts = '?t=' + Date.now();
+            document.getElementById('img-hasil-pb').src = data.foto_hasil + ts;
+            document.getElementById('btn-download-pb').href = data.foto_hasil;
+            document.getElementById('btn-download-pb').download = data.nama_asli + '_photobooth.jpg';
+            document.getElementById('hasil-photobooth').style.display = 'block';
+            document.getElementById('hasil-photobooth').scrollIntoView({ behavior: 'smooth' });
+        })
+        .catch(() => {
+            sembunyikanLoading();
+            alert('Terjadi kesalahan, coba lagi.');
+            document.getElementById('tab-photobooth').style.display = 'block';
+        });
+}
+
+function reset() {
+    currentSessionId = null;
+    currentNamaAsli = null;
+    selectedBg = null;
+    selectedFrame = null;
+
+    document.getElementById('input-foto').value = '';
+    document.getElementById('input-zip').value = '';
+    document.getElementById('input-foto-pb').value = '';
+    document.getElementById('img-before').src = '';
+    document.getElementById('img-before-pb').src = '';
+    document.getElementById('preview-before').style.display = 'none';
+    document.getElementById('preview-before-pb').style.display = 'none';
+    document.getElementById('btn-proses').style.display = 'none';
+    document.getElementById('btn-proses-batch').style.display = 'none';
+    document.getElementById('btn-proses-pb').style.display = 'none';
+    document.getElementById('zip-nama').style.display = 'none';
+    document.getElementById('hasil-single').style.display = 'none';
+    document.getElementById('hasil-batch').style.display = 'none';
+    document.getElementById('hasil-photobooth').style.display = 'none';
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('gagal-info').style.display = 'none';
+    document.getElementById('batch-grid').innerHTML = '';
+    document.getElementById('pb-assets').style.display = 'none';
+    document.getElementById('bg-grid').innerHTML = '';
+
+    if (currentTab === 'single') {
+        document.getElementById('tab-single').style.display = 'block';
+    } else if (currentTab === 'batch') {
+        document.getElementById('tab-batch').style.display = 'block';
+    } else {
+        document.getElementById('tab-photobooth').style.display = 'block';
+    }
 }
